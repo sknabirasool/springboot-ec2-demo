@@ -7,35 +7,47 @@ on:
 
 jobs:
   build-and-deploy:
-
     runs-on: ubuntu-latest
 
     steps:
 
+      # Checkout Source Code
       - name: Checkout Source Code
         uses: actions/checkout@v4
 
+      # Setup Java
       - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
+      # Build Project
       - name: Build Project
         run: mvn clean package -DskipTests
 
+      # Verify Build
       - name: Verify Generated JAR
-        run: ls -lh target/
+        run: ls -lh target
 
+      # Prepare Deployment Artifact
+      - name: Prepare Deployment Artifact
+        run: |
+          mkdir deploy
+          cp target/*.jar deploy/app.jar
+          ls -lh deploy
+
+      # Copy JAR to EC2
       - name: Copy JAR to EC2
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          source: "target/*.jar"
-          target: "/home/ubuntu/springboot-app/"
+          source: "deploy/app.jar"
+          target: "/home/ubuntu/springboot-app"
 
+      # Restart Application
       - name: Restart Spring Boot Application
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -44,41 +56,31 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script_stop: false
           script: |
-            echo "==============================="
-            echo "Spring Boot Deployment Started"
-            echo "==============================="
+            echo "========== DEPLOYMENT STARTED =========="
 
             mkdir -p /home/ubuntu/springboot-app
 
             cd /home/ubuntu/springboot-app
 
-            echo "Current Files:"
+            echo "Files Available:"
             ls -lh
 
-            echo "Stopping old application..."
+            echo "Stopping Old Application..."
 
-            PID=$(pgrep -f ".jar")
+            pkill -f app.jar || true
 
-            if [ -n "$PID" ]; then
-              echo "Stopping Process ID: $PID"
-              kill -9 $PID
-              sleep 5
-            else
-              echo "No existing application found."
-            fi
+            sleep 5
 
-            echo "Starting new application..."
+            echo "Starting New Application..."
 
-            nohup java -jar *.jar > app.log 2>&1 &
+            nohup java -jar app.jar > app.log 2>&1 &
 
             sleep 10
 
-            echo "Running Java Processes:"
+            echo "Running Processes:"
             ps -ef | grep java
 
             echo "Application Log:"
-            tail -20 app.log || true
+            tail -30 app.log || true
 
-            echo "==============================="
-            echo "Deployment Completed Successfully"
-            echo "==============================="
+            echo "========== DEPLOYMENT COMPLETED =========="
