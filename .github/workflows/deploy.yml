@@ -6,38 +6,28 @@ on:
       - main
 
 jobs:
-  build-and-deploy:
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
 
-      # Checkout Source Code
-      - name: Checkout Source Code
+      - name: Checkout Source
         uses: actions/checkout@v4
 
-      # Setup Java
-      - name: Setup Java 17
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      # Build Project
       - name: Build Project
         run: mvn clean package -DskipTests
 
-      # Verify Build
-      - name: Verify Generated JAR
-        run: ls -lh target
-
-      # Prepare Deployment Artifact
-      - name: Prepare Deployment Artifact
+      - name: Create Deploy Folder
         run: |
           mkdir deploy
           cp target/*.jar deploy/app.jar
-          ls -lh deploy
 
-      # Copy JAR to EC2
       - name: Copy JAR to EC2
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -47,40 +37,16 @@ jobs:
           source: "deploy/app.jar"
           target: "/home/ubuntu/springboot-app"
 
-      # Restart Application
-      - name: Restart Spring Boot Application
+      - name: Restart Spring Boot Service
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          script_stop: false
           script: |
-            echo "========== DEPLOYMENT STARTED =========="
+            sudo systemctl daemon-reload
+            sudo systemctl restart springboot
+            sudo systemctl status springboot --no-pager
 
-            mkdir -p /home/ubuntu/springboot-app
-
-            cd /home/ubuntu/springboot-app
-
-            echo "Files Available:"
-            ls -lh
-
-            echo "Stopping Old Application..."
-
-            pkill -f app.jar || true
-
-            sleep 5
-
-            echo "Starting New Application..."
-
-            nohup java -jar app.jar > app.log 2>&1 &
-
-            sleep 10
-
-            echo "Running Processes:"
-            ps -ef | grep java
-
-            echo "Application Log:"
-            tail -30 app.log || true
-
-            echo "========== DEPLOYMENT COMPLETED =========="
+            echo "Application Log"
+            tail -20 /home/ubuntu/springboot-app/app.log || true
