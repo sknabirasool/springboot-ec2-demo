@@ -8,6 +8,11 @@ public class HelloController {
 
     @GetMapping("/")
     public String index() {
-        return "Spring Boot Application Running on AWS Ec2 Test";
+        return "Spring Boot Application Running on AWS Ec2 Test ";
+    }
+
+    @GetMapping("/login")
+    public String login() {
+        return "Login Successful";
     }
 }

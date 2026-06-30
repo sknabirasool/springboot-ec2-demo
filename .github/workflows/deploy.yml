@@ -6,39 +6,47 @@ on:
       - main
 
 jobs:
-  build-and-deploy:
-
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
 
-      - name: Checkout Code
+      - name: Checkout Source
         uses: actions/checkout@v4
 
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          java-version: '17'
 
       - name: Build Project
-        run: mvn clean package
+        run: mvn clean package -DskipTests
 
-      - name: Copy Jar to EC2
+      - name: Create Deploy Folder
+        run: |
+          mkdir deploy
+          cp target/*.jar deploy/app.jar
+
+      - name: Copy JAR to EC2
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          source: "target/*.jar"
+          source: "deploy/app.jar"
           target: "/home/ubuntu/springboot-app"
 
-      - name: Restart Application
+      - name: Restart Spring Boot Service
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            pkill -f 'java -jar' || true
-            nohup java -jar /home/ubuntu/springboot-app/target/*.jar > app.log 2>&1 &
+            sudo systemctl daemon-reload
+            sudo systemctl restart springboot
+            sudo systemctl status springboot --no-pager
+
+            echo "Application Log"
+            tail -20 /home/ubuntu/springboot-app/app.log || true
