@@ -21,10 +21,10 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Build Spring Boot Project
+      - name: Build Project
         run: mvn clean package -DskipTests
 
-      - name: Verify JAR
+      - name: Verify Generated JAR
         run: ls -lh target/
 
       - name: Copy JAR to EC2
@@ -42,18 +42,33 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
+          script_stop: false
           script: |
-            echo "Stopping existing application..."
-            pkill -f "java -jar" || true
+            echo "==============================="
+            echo "Spring Boot Deployment Started"
+            echo "==============================="
 
-            sleep 5
+            mkdir -p /home/ubuntu/springboot-app
 
             cd /home/ubuntu/springboot-app
 
-            echo "Files in deployment directory:"
+            echo "Current Files:"
             ls -lh
 
-            echo "Starting application..."
+            echo "Stopping old application..."
+
+            PID=$(pgrep -f ".jar")
+
+            if [ -n "$PID" ]; then
+              echo "Stopping Process ID: $PID"
+              kill -9 $PID
+              sleep 5
+            else
+              echo "No existing application found."
+            fi
+
+            echo "Starting new application..."
+
             nohup java -jar *.jar > app.log 2>&1 &
 
             sleep 10
@@ -61,5 +76,9 @@ jobs:
             echo "Running Java Processes:"
             ps -ef | grep java
 
-            echo "Application Logs:"
+            echo "Application Log:"
             tail -20 app.log || true
+
+            echo "==============================="
+            echo "Deployment Completed Successfully"
+            echo "==============================="
